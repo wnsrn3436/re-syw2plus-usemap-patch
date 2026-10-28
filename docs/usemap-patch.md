@@ -1,6 +1,6 @@
 # Seven Years War 2+ use map patch
 
-The executable of Seven Years War 2+: Chosun's Counterattack is changed so that the units placed in the map appear when a normal game starts. The six calls that create starting units for each player are removed, and where that function ends, it jumps to code already in the game that goes through the map's unit placement table and creates those units.
+This patch changes the executable of Seven Years War 2+: Chosun's Counterattack so that the units placed in the map appear when a normal game starts. It removes the six calls that create each player's starting units, and at the end of that function it jumps to code already in the game. That code walks the map's unit placement table and creates the units.
 
 
 ## Target
@@ -30,7 +30,7 @@ The file is not packed and the image base is `0x400000`. Every change is inside 
 
 ## The starting unit function
 
-`0x0041F0E0` calls `0x0041F360` and returns if `[0x00975914]`, which looks like the game type, is 3. Otherwise it falls through to `0x0041F0F8` and creates the starting units of the eight players.
+When `[0x00975914]`, which appears to be the game type, is 3, `0x0041F0E0` calls `0x0041F360` and returns. Otherwise it falls through to `0x0041F0F8` and creates the starting units of the eight players.
 
 ```
 0041F0E0  66 83 3D 14 59 97 00 03  cmp  word [0x00975914], 3
@@ -45,7 +45,7 @@ The file is not packed and the image base is `0x400000`. Every change is inside 
 0041F104  BB 70 67 95 00           mov  ebx, 0x00956770    ; player 1 data
 ```
 
-Player data starts at `0x00956770`, eight records `0x3ABC` bytes apart, and the first byte is the race. For races 1, 2, and 3 it creates two unit types each, and if `[0x00975914]` is 1 it creates one more unit of type `0x51`. The position is the x at `0x00B3DE58 + player index * 0x338` and the y at `0x00B3DE5C + player index * 0x338`.
+Player data is eight records starting at `0x00956770`, spaced `0x3ABC` bytes apart, and the first byte of each is the race. For each of races 1, 2, and 3 the function creates two unit types, and if `[0x00975914]` is 1 it creates one more unit of type `0x51`. The position comes from the x at `0x00B3DE58 + player index * 0x338` and the y at `0x00B3DE5C + player index * 0x338`.
 
 | Call site | Unit type | Condition |
 |---|---|---|
@@ -80,9 +80,9 @@ Each call looks like this. If `0x00442FA0(type)` returns a nonzero value, `0x004
 0041F256  83 C4 1C              add  esp, 0x1C
 ```
 
-`0x00443190` is cdecl, so the caller cleans up the arguments (`add esp, 0x1C`). Replacing only the `CALL` with `NOP`s keeps the stack balanced.
+`0x00443190` is cdecl. The caller cleans up the arguments (`add esp, 0x1C`), so the stack stays balanced even when only the `CALL` is replaced with `NOP`s.
 
-The function ends by restoring registers and then `ret`. That `ret` became a `JMP` to the map unit placement loop. A new `ret` was put in the last of the five `90`s after it, as the place to come back to.
+The function restores its registers and ends with `ret`. The patch turns that `ret` into a `JMP` to the map unit placement loop and puts a new `ret` in the last of the five `90` bytes that follow, as the place to come back to.
 
 ```
 0041F352  5F 5E 5D 5B           pop edi ; pop esi ; pop ebp ; pop ebx
@@ -141,13 +141,13 @@ The function `0x004C3E50` contains a loop that goes through the map's unit place
 004C3F73  E9 E3 B3 F5 FF        jmp  0x0041F35B        ; patched
 ```
 
-The spot where the loop ends (`0x004C3F73`) became a jump to the `ret` at `0x0041F35B`. So the starting unit function creates the units placed in the map and then returns to its caller.
+With the end of the loop (`0x004C3F73`) turned into a jump to the `ret` at `0x0041F35B`, the starting unit function creates the units placed in the map and then returns to its caller.
 
 
 ## Left for further investigation
 
-- The jump lands at `0x004C3EFB`, the instruction after `xor edi, edi`. The loop counter `edi` starts from the caller's `edi`, restored at `0x0041F352`.
-- `0x004C3E50` also runs through this loop, so after the patch it goes to `0x0041F35B` after the loop. Which screen uses the path through `0x00424D30`, the caller of that function.
+- The jump lands at `0x004C3EFB`, the instruction after `xor edi, edi`. The loop counter `edi` starts from the caller's `edi` value, that is, the value restored at `0x0041F352`.
+- `0x004C3E50` also runs through this loop, so with the patch applied it goes to `0x0041F35B` once the loop ends. Which screen's path runs through `0x00424D30`, the caller of that function.
 - Which game type each value of `[0x00975914]` stands for, and where the code that fills the table is.
 
 
